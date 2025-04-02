@@ -12,6 +12,10 @@ $(PLUGINS):
 .c.o:
 	$(CC) $(CFLAGS) -o $(@) -c $(<)
 
+install:
+	mkdir -p $(LADSPA_DIR)
+	install -Dm755 $(PLUGINS:%=build/lib%.so) $(LADSPA_DIR)
+
 clean:
 	rm -rf build
 
