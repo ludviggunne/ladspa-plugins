@@ -1,7 +1,13 @@
 SOURCES=$(wildcard $(PLUGIN)/*.c)
 
-lib$(PLUGIN).so: $(SOURCES:%.c=%.o)
+build/lib$(PLUGIN).so: $(SOURCES:$(PLUGIN)/%.c=build/$(PLUGIN)/%.o) | build
 	$(CC) $(LDFLAGS) -o $(@) $(^)
 
-.c.o:
+build/$(PLUGIN)/%.o: $(PLUGIN)/%.c | build/$(PLUGIN)
 	$(CC) $(CFLAGS) -o $(@) -c $(<)
+
+build/$(PLUGIN):
+	mkdir -p build/$(PLUGIN)
+
+build:
+	mkdir -p build
