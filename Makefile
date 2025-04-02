@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -Wpedantic -isystem$(PWD) -std=c11
+CFLAGS=-Wall -Wextra -Wpedantic -isystem$(PWD) -std=c11 -O3 -g
 LDFLAGS=-shared -fPIC -flto -fvisibility=hidden
 PLUGINS=orbit delay
 MAKEFLAGS+=--no-print-directory
