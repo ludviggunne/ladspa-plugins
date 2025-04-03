@@ -1,25 +1,16 @@
 /*
- * Plugin name: Delay
+ * Plugin name: Oribtal delay
  *
- * Description: Digital delay effect
+ * Description: Delay effect with some cool panning
  */
 
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <ladspa.h>
 
-#define PI 3.14159265358979f
-
-static const LADSPA_Descriptor descriptor;
-
-const LADSPA_Descriptor *ladspa_descriptor(unsigned long index)
-{
-  if (index != 0)
-    return NULL;
-
-  return &descriptor;
-}
+#include "ladspa.h"
+#include "descriptors.h"
+#include "utils.h"
 
 enum {
   PORT_INPUT_LEFT = 0,
@@ -28,78 +19,70 @@ enum {
   PORT_FEEDBACK_LEFT,
   PORT_GAIN_LEFT,
   PORT_WETDRYMIX_LEFT,
+  PORT_CUTOFF_LEFT,
   PORT_INPUT_RIGHT,
   PORT_OUTPUT_RIGHT,
   PORT_DELAY_RIGHT,
   PORT_FEEDBACK_RIGHT,
   PORT_GAIN_RIGHT,
   PORT_WETDRYMIX_RIGHT,
+  PORT_CUTOFF_RIGHT,
   PORT_ORBITAL,
   _PORT_COUNT,
 };
 
-const LADSPA_PortDescriptor port_descriptors[_PORT_COUNT] = {
+static const LADSPA_PortDescriptor port_descriptors[_PORT_COUNT] = {
   [PORT_INPUT_LEFT]         = LADSPA_PORT_INPUT  | LADSPA_PORT_AUDIO,
   [PORT_OUTPUT_LEFT]        = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO,
   [PORT_DELAY_LEFT]         = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_FEEDBACK_LEFT]      = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_GAIN_LEFT]          = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_WETDRYMIX_LEFT]     = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
+  [PORT_CUTOFF_LEFT]        = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_INPUT_RIGHT]        = LADSPA_PORT_INPUT  | LADSPA_PORT_AUDIO,
   [PORT_OUTPUT_RIGHT]       = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO,
   [PORT_DELAY_RIGHT]        = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_FEEDBACK_RIGHT]     = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_GAIN_RIGHT]         = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_WETDRYMIX_RIGHT]    = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
+  [PORT_CUTOFF_RIGHT]       = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
   [PORT_ORBITAL]            = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
 };
 
-const char *const port_names[_PORT_COUNT] = {
+static const char *const port_names[_PORT_COUNT] = {
   [PORT_INPUT_LEFT]         = "Left input",
   [PORT_OUTPUT_LEFT]        = "Left output",
   [PORT_DELAY_LEFT]         = "Left delay",
   [PORT_FEEDBACK_LEFT]      = "Left feedback",
   [PORT_GAIN_LEFT]          = "Left gain",
   [PORT_WETDRYMIX_LEFT]     = "Left wet/dry mix",
+  [PORT_CUTOFF_LEFT]        = "Left cutoff",
   [PORT_INPUT_RIGHT]        = "Right input",
   [PORT_OUTPUT_RIGHT]       = "Right output",
   [PORT_DELAY_RIGHT]        = "Right delay",
   [PORT_FEEDBACK_RIGHT]     = "Right feedback",
   [PORT_GAIN_RIGHT]         = "Right gain",
   [PORT_WETDRYMIX_RIGHT]    = "Right wet/dry mix",
+  [PORT_CUTOFF_RIGHT]       = "Right cutoff",
   [PORT_ORBITAL]            = "Orbital",
 };
 
-#define DEFAULT_PORT_RANGE_HINTS      \
-  {                                   \
-    .HintDescriptor =                 \
-      LADSPA_HINT_BOUNDED_BELOW |     \
-      LADSPA_HINT_BOUNDED_ABOVE |     \
-      LADSPA_HINT_DEFAULT_MIDDLE,     \
-    .LowerBound = 0.f,                \
-    .UpperBound = 1.f,                \
-  }
-
-const LADSPA_PortRangeHint port_range_hints[_PORT_COUNT] = {
-  [PORT_INPUT_RIGHT]     = {0},
+static const LADSPA_PortRangeHint port_range_hints[_PORT_COUNT] = {
+  [PORT_INPUT_LEFT]      = {0},
   [PORT_OUTPUT_LEFT]     = {0},
-  [PORT_DELAY_LEFT]      = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_FEEDBACK_LEFT]   = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_GAIN_LEFT]       = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_WETDRYMIX_LEFT]  = DEFAULT_PORT_RANGE_HINTS,
+  [PORT_DELAY_LEFT]      = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_FEEDBACK_LEFT]   = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_GAIN_LEFT]       = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_WETDRYMIX_LEFT]  = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_CUTOFF_LEFT]     = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_INPUT_RIGHT]     = {0},
   [PORT_OUTPUT_RIGHT]    = {0},
-  [PORT_DELAY_RIGHT]     = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_FEEDBACK_RIGHT]  = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_GAIN_RIGHT]      = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_WETDRYMIX_RIGHT] = DEFAULT_PORT_RANGE_HINTS,
-  [PORT_ORBITAL]         = {
-                             .HintDescriptor =
-                               LADSPA_HINT_BOUNDED_BELOW |
-                               LADSPA_HINT_BOUNDED_ABOVE |
-                               LADSPA_HINT_DEFAULT_MIDDLE,
-                             .LowerBound = 0.f,
-                             .UpperBound = 10.f,
-                           },
+  [PORT_DELAY_RIGHT]     = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_FEEDBACK_RIGHT]  = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_GAIN_RIGHT]      = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_WETDRYMIX_RIGHT] = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_CUTOFF_RIGHT]    = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_ORBITAL]         = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 10.f, 0),
 };
 
 struct instance {
@@ -112,18 +95,18 @@ struct instance {
   unsigned long    counter;
 };
 
-LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate);
-void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location);
-void run(LADSPA_Handle instance, unsigned long sample_count);
-void cleanup(LADSPA_Handle instance);
+static LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate);
+static void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location);
+static void run(LADSPA_Handle instance, unsigned long sample_count);
+static void cleanup(LADSPA_Handle instance);
 
-static const LADSPA_Descriptor descriptor = {
-  .UniqueID               = 3,
+const LADSPA_Descriptor orbital_delay_descriptor = {
+  .UniqueID               = UID_ORBITAL_DELAY,
   .Label                  = "audio",
   .Properties             = 0,
   .Name                   = "Orbital delay",
-  .Maker                  = "Ludvig Gunne Lindström",
-  .Copyright              = "None",
+  .Maker                  = MAKER,
+  .Copyright              = COPYRIGHT,
   .PortCount              = _PORT_COUNT,
   .PortDescriptors        = port_descriptors,
   .PortNames              = port_names,
@@ -139,7 +122,7 @@ static const LADSPA_Descriptor descriptor = {
   .cleanup                = cleanup,
 };
 
-LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate)
+static LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate)
 {
   struct instance *const instance_ = calloc(1, sizeof(*instance_));
   if (instance_ == NULL)
@@ -171,13 +154,13 @@ LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned 
   return (LADSPA_Handle) instance_;
 }
 
-void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location)
+static void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location)
 {
   struct instance *const instance_ = (struct instance *) instance;
   instance_->ports[port] = data_location;
 }
 
-void run(LADSPA_Handle instance, unsigned long sample_count)
+static void run(LADSPA_Handle instance, unsigned long sample_count)
 {
   struct instance *const instance_ = (struct instance *) instance;
 
@@ -193,6 +176,8 @@ void run(LADSPA_Handle instance, unsigned long sample_count)
   const LADSPA_Data r_gain      = *instance_->ports[PORT_GAIN_RIGHT];
   const LADSPA_Data l_wetdrymix = *instance_->ports[PORT_WETDRYMIX_LEFT];
   const LADSPA_Data r_wetdrymix = *instance_->ports[PORT_WETDRYMIX_RIGHT];
+  const LADSPA_Data l_cutoff    = *instance_->ports[PORT_CUTOFF_LEFT];
+  const LADSPA_Data r_cutoff    = *instance_->ports[PORT_CUTOFF_RIGHT];
 
   const LADSPA_Data orbital     = *instance_->ports[PORT_ORBITAL] *
                                   (LADSPA_Data) instance_->sample_rate;
@@ -231,15 +216,27 @@ void run(LADSPA_Handle instance, unsigned long sample_count)
     LADSPA_Data l_writeback = l_in[i] + l_feedback * l_out[i];
     LADSPA_Data r_writeback = r_in[i] + r_feedback * r_out[i];
 
-    instance_->left_buffer[instance_->cursor] = pan * l_writeback + (1.f - pan) * r_writeback;
-    instance_->right_buffer[instance_->cursor] = pan * r_writeback + (1.f - pan) * l_writeback;
+    l_writeback = pan * l_writeback + (1.f - pan) * r_writeback;
+    r_writeback = pan * r_writeback + (1.f - pan) * l_writeback;
+
+    unsigned long cutoff_cursor = instance_->cursor > 0 ?
+                                  instance_->cursor - 1 :
+                                  instance_->buffer_size - 1;
+
+    instance_->left_buffer[instance_->cursor] =
+      (l_cutoff) * l_writeback +
+      (1.f - l_cutoff) * instance_->left_buffer[cutoff_cursor];
+
+    instance_->right_buffer[instance_->cursor] =
+      (r_cutoff) * r_writeback +
+      (1.f - r_cutoff) * instance_->left_buffer[cutoff_cursor];
 
     if (instance_->cursor++ == instance_->buffer_size)
       instance_->cursor = 0;
   }
 }
 
-void cleanup(LADSPA_Handle instance)
+static void cleanup(LADSPA_Handle instance)
 {
   struct instance *const instance_ = (struct instance *) instance;
 

@@ -6,17 +6,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <ladspa.h>
 
-static const LADSPA_Descriptor descriptor;
-
-const LADSPA_Descriptor *ladspa_descriptor(unsigned long index)
-{
-  if (index != 0)
-    return NULL;
-
-  return &descriptor;
-}
+#include "ladspa.h"
+#include "descriptors.h"
+#include "utils.h"
 
 enum {
   PORT_INPUT = 0,
@@ -28,7 +21,7 @@ enum {
   _PORT_COUNT,
 };
 
-const LADSPA_PortDescriptor port_descriptors[_PORT_COUNT] = {
+static const LADSPA_PortDescriptor port_descriptors[_PORT_COUNT] = {
   [PORT_INPUT]        = LADSPA_PORT_INPUT  | LADSPA_PORT_AUDIO,
   [PORT_OUTPUT]       = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO,
   [PORT_DELAY]        = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
@@ -37,7 +30,7 @@ const LADSPA_PortDescriptor port_descriptors[_PORT_COUNT] = {
   [PORT_WETDRYMIX]    = LADSPA_PORT_INPUT  | LADSPA_PORT_CONTROL,
 };
 
-const char *const port_names[_PORT_COUNT] = {
+static const char *const port_names[_PORT_COUNT] = {
   [PORT_INPUT]        = "Input",
   [PORT_OUTPUT]       = "Output",
   [PORT_DELAY]        = "Delay",
@@ -46,41 +39,13 @@ const char *const port_names[_PORT_COUNT] = {
   [PORT_WETDRYMIX]    = "Wet/dry mix",
 };
 
-const LADSPA_PortRangeHint port_range_hints[_PORT_COUNT] = {
+static const LADSPA_PortRangeHint port_range_hints[_PORT_COUNT] = {
   [PORT_INPUT] = {0},
   [PORT_OUTPUT] = {0},
-  [PORT_DELAY] = {
-    .HintDescriptor = 
-      LADSPA_HINT_BOUNDED_BELOW |
-      LADSPA_HINT_BOUNDED_ABOVE |
-      LADSPA_HINT_DEFAULT_MIDDLE,
-    .LowerBound = 0.f,
-    .UpperBound = 1.f,
-  },
-  [PORT_FEEDBACK] = {
-    .HintDescriptor = 
-      LADSPA_HINT_BOUNDED_BELOW |
-      LADSPA_HINT_BOUNDED_ABOVE |
-      LADSPA_HINT_DEFAULT_MIDDLE,
-    .LowerBound = 0.f,
-    .UpperBound = 1.f,
-  },
-  [PORT_GAIN] = {
-    .HintDescriptor = 
-      LADSPA_HINT_BOUNDED_BELOW |
-      LADSPA_HINT_BOUNDED_ABOVE |
-      LADSPA_HINT_DEFAULT_MIDDLE,
-    .LowerBound = 0.f,
-    .UpperBound = 1.f,
-  },
-  [PORT_WETDRYMIX] = {
-    .HintDescriptor = 
-      LADSPA_HINT_BOUNDED_BELOW |
-      LADSPA_HINT_BOUNDED_ABOVE |
-      LADSPA_HINT_DEFAULT_MIDDLE,
-    .LowerBound = 0.f,
-    .UpperBound = 1.f,
-  },
+  [PORT_DELAY] = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_FEEDBACK] = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_GAIN] = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
+  [PORT_WETDRYMIX] = PORT_RANGE_HINTS_BOUNDED_FLOAT(0.f, 1.f, 0),
 };
 
 struct instance {
@@ -91,18 +56,18 @@ struct instance {
   unsigned long    cursor;
 };
 
-LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate);
-void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location);
-void run(LADSPA_Handle instance, unsigned long sample_count);
-void cleanup(LADSPA_Handle instance);
+static LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate);
+static void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location);
+static void run(LADSPA_Handle instance, unsigned long sample_count);
+static void cleanup(LADSPA_Handle instance);
 
-static const LADSPA_Descriptor descriptor = {
-  .UniqueID               = 2,
+const LADSPA_Descriptor delay_descriptor = {
+  .UniqueID               = UID_DELAY,
   .Label                  = "audio",
   .Properties             = 0,
   .Name                   = "Delay",
-  .Maker                  = "Ludvig Gunne Lindström",
-  .Copyright              = "None",
+  .Maker                  = MAKER,
+  .Copyright              = COPYRIGHT,
   .PortCount              = _PORT_COUNT,
   .PortDescriptors        = port_descriptors,
   .PortNames              = port_names,
@@ -118,7 +83,7 @@ static const LADSPA_Descriptor descriptor = {
   .cleanup                = cleanup,
 };
 
-LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate)
+static LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned long sample_rate)
 {
   struct instance *const instance_ = calloc(1, sizeof(*instance_));
   if (instance_ == NULL)
@@ -140,13 +105,13 @@ LADSPA_Handle instantiate(const struct _LADSPA_Descriptor *descriptor, unsigned 
   return (LADSPA_Handle) instance_;
 }
 
-void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location)
+static void connect_port(LADSPA_Handle instance, unsigned long port, LADSPA_Data *data_location)
 {
   struct instance *const instance_ = (struct instance *) instance;
   instance_->ports[port] = data_location;
 }
 
-void run(LADSPA_Handle instance, unsigned long sample_count)
+static void run(LADSPA_Handle instance, unsigned long sample_count)
 {
   struct instance *const instance_ = (struct instance *) instance;
 
@@ -176,7 +141,7 @@ void run(LADSPA_Handle instance, unsigned long sample_count)
   }
 }
 
-void cleanup(LADSPA_Handle instance)
+static void cleanup(LADSPA_Handle instance)
 {
   struct instance *const instance_ = (struct instance *) instance;
 

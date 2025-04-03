@@ -1,23 +1,21 @@
-CFLAGS=-Wall -Wextra -Wpedantic -isystem$(PWD) -std=c11 -O3 -g
-LDFLAGS=-shared -fPIC -flto -fvisibility=hidden
-PLUGINS=orbit delay orbital_delay
-MAKEFLAGS+=--no-print-directory
+CFLAGS=-Wall -Wextra -Wpedantic -std=c11 -O3 -g
+LDFLAGS=-shared -fPIC -flto -fvisibility=hidden -lm
+PLUGIN=libllp.so
+SOURCE=$(wildcard *.c)
 
-all: $(PLUGINS)
+all: $(PLUGIN)
 
-orbit: LDFLAGS+=-lm
-orbital_delay: LDFLAGS+=-lm
-$(PLUGINS):
-	$(MAKE) -f plugin.mk PLUGIN=$(@) CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
+$(PLUGIN): $(SOURCE:%.c=%.o)
+	$(CC) $(LDFLAGS) -o $(@) $(^)
 		
 .c.o:
 	$(CC) $(CFLAGS) -o $(@) -c $(<)
 
 install:
 	mkdir -p $(LADSPA_DIR)
-	install -Dm755 $(PLUGINS:%=build/lib%.so) $(LADSPA_DIR)
+	install -Dm755 $(PLUGIN) $(LADSPA_DIR)/$(PLUGIN)
 
 clean:
-	rm -rf build
+	rm -rf *.o $(PLUGIN)
 
-.PHONY: $(PLUGINS)
+.PHONY: clean install
