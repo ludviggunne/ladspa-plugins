@@ -1,11 +1,12 @@
 CFLAGS=-Wall -Wextra -Wpedantic -isystem$(PWD) -std=c11 -O3 -g
 LDFLAGS=-shared -fPIC -flto -fvisibility=hidden
-PLUGINS=orbit delay
+PLUGINS=orbit delay orbital_delay
 MAKEFLAGS+=--no-print-directory
 
 all: $(PLUGINS)
 
 orbit: LDFLAGS+=-lm
+orbital_delay: LDFLAGS+=-lm
 $(PLUGINS):
 	$(MAKE) -f plugin.mk PLUGIN=$(@) CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
 		
