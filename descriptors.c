@@ -5,6 +5,7 @@ static const LADSPA_Descriptor *descriptors[] = {
   &orbit_descriptor,
   &delay_descriptor,
   &orbital_delay_descriptor,
+  &granular_descriptor,
   NULL,
 };
 
