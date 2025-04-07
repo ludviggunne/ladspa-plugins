@@ -1,21 +1,25 @@
-CFLAGS=-Wall -Wextra -Wpedantic -std=c11 -O3 -g
+CFLAGS=-Wall -Wextra -Wpedantic -std=c11 -O3 -g -Iinclude
 LDFLAGS=-shared -fPIC -flto -fvisibility=hidden -lm
 PLUGIN=libllp.so
-SOURCE=$(wildcard *.c)
+SOURCEDIR=src
+SOURCE=$(wildcard $(SOURCEDIR)/*.c)
+BUILDDIR=build
 
-all: $(PLUGIN)
+all: $(BUILDDIR)/$(PLUGIN)
 
-$(PLUGIN): $(SOURCE:%.c=%.o)
+$(BUILDDIR)/$(PLUGIN): $(SOURCE:$(SOURCEDIR)/%.c=$(BUILDDIR)/%.o)
 	$(CC) $(LDFLAGS) -o $(@) $(^)
 		
-.c.o:
+$(BUILDDIR)/%.o: $(SOURCEDIR)/%.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -o $(@) -c $(<)
 
+$(BUILDDIR):
+	mkdir -p $@
+
 install:
-	mkdir -p $(LADSPA_DIR)
-	install -Dm755 $(PLUGIN) $(LADSPA_DIR)/$(PLUGIN)
+	install -Dm755 $(BUILDDIR)/$(PLUGIN) $(LADSPA_DIR)/$(PLUGIN)
 
 clean:
-	rm -rf *.o $(PLUGIN)
+	rm -rf $(BUILDDIR)
 
 .PHONY: clean install
